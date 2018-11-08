@@ -1,7 +1,7 @@
-import { StorageManager } from '../../search/types'
 import { browser, Tabs, Storage } from 'webextension-polyfill-ts'
+import uniqBy from 'lodash/fp/uniqBy'
 
-import { createPageFromTab, Dexie, Tag } from '../../search'
+import { createPageFromTab, Tag, Dexie, StorageManager } from '../../search'
 import { FeatureStorage } from '../../search/storage'
 import { STORAGE_KEYS as IDXING_PREF_KEYS } from '../../options/settings/constants'
 import { Annotation, SearchParams } from '../types'
@@ -140,6 +140,7 @@ export class AnnotationStorage extends FeatureStorage {
     private _getDb: () => Promise<Dexie>
     private _annotationsColl: string
     private _tagsColl: string
+    private _uniqAnnots: (annots: Annotation[]) => Annotation[] = uniqBy('url')
 
     constructor({
         storageManager,
@@ -219,24 +220,34 @@ export class AnnotationStorage extends FeatureStorage {
             .findObjects<Annotation>({ pageUrl })
     }
 
+    /**
+     * I don't know why this is the only way I can get this working...
+     * I originally intended a simpler single query like:
+     *  { $or: [_body_terms: term, _comment_terms: term] }
+     */
+    private async termSearch(term: string) {
+        const bodyRes = await this.storageManager
+            .collection(this._annotationsColl)
+            .findObjects<Annotation>({ _body_terms: { $all: [term] } })
+
+        const commentsRes = await this.storageManager
+            .collection(this._annotationsColl)
+            .findObjects<Annotation>({ _comment_terms: { $all: [term] } })
+
+        return this._uniqAnnots([...bodyRes, ...commentsRes])
+    }
+
     async search({
         endDate = Date.now(),
         startDate = 0,
         terms = [],
     }: SearchParams) {
-        return this.storageManager
-            .collection(this._annotationsColl)
-            .findObjects<Annotation>({
-                $or: [
-                    { _body_terms: { $all: terms } },
-                    { _comments_terms: { $all: terms } },
-                    { _pageTitle_terms: { $all: terms } },
-                ],
-                createdWhen: {
-                    $lte: endDate,
-                    $gte: startDate,
-                },
-            })
+        const termResults = await Promise.all(
+            terms.map(term => this.termSearch(term)),
+        )
+
+        // Flatten out results
+        return this._uniqAnnots([].concat(...termResults))
     }
 
     async insertDirectLink({
