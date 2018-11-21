@@ -32,4 +32,6 @@ export interface SearchParams {
     terms: string[]
     startDate: Date | number
     endDate: Date | number
+    /** If defined, confines search to a particular page. */
+    url?: string
 }

@@ -228,17 +228,25 @@ export class AnnotationStorage extends FeatureStorage {
     private termSearch = ({
         endDate = Date.now(),
         startDate = 0,
+        url,
     }: Partial<SearchParams>) => async (term: string) => {
-        const termSearchField = (field: string) =>
-            this.storageManager
+        const termSearchField = (field: string) => {
+            const query: any = {
+                [field]: { $all: [term] },
+                createdWhen: {
+                    $lte: endDate,
+                    $gte: startDate,
+                },
+            }
+
+            if (url != null && url.length) {
+                query.pageUrl = url
+            }
+
+            return this.storageManager
                 .collection(this._annotationsColl)
-                .findObjects<Annotation>({
-                    [field]: { $all: [term] },
-                    createdWhen: {
-                        $lte: endDate,
-                        $gte: startDate,
-                    },
-                })
+                .findObjects<Annotation>(query)
+        }
 
         const bodyRes = await termSearchField('_body_terms')
         const commentsRes = await termSearchField('_comment_terms')
