@@ -228,6 +228,7 @@ export class AnnotationStorage extends FeatureStorage {
     private termSearch = ({
         endDate = Date.now(),
         startDate = 0,
+        limit = 5,
         url,
     }: Partial<SearchParams>) => async (term: string) => {
         const termSearchField = (field: string) => {
@@ -245,12 +246,12 @@ export class AnnotationStorage extends FeatureStorage {
 
             return this.storageManager
                 .collection(this._annotationsColl)
-                .findObjects<Annotation>(query)
+                .findObjects<Annotation>(query, { limit })
         }
 
         const bodyRes = await termSearchField('_body_terms')
         const commentsRes = await termSearchField('_comment_terms')
-        return this._uniqAnnots([...bodyRes, ...commentsRes])
+        return this._uniqAnnots([...bodyRes, ...commentsRes]).slice(0, limit)
     }
 
     async search({ terms = [], ...searchParams }: SearchParams) {

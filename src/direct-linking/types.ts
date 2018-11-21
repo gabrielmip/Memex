@@ -34,4 +34,5 @@ export interface SearchParams {
     endDate: Date | number
     /** If defined, confines search to a particular page. */
     url?: string
+    limit: number
 }
