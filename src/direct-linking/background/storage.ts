@@ -144,6 +144,10 @@ export class AnnotationStorage extends FeatureStorage {
     static ANNOTS_COLL = 'annotations'
     static TAGS_COLL = 'tags'
     static PAGES_COLL = 'pages'
+    static MEMEX_LINK_PROVIDERS = [
+        'http://memex.link',
+        'http://staging.memex.link',
+    ]
 
     private _browserStorageArea: Storage.StorageArea
     private _getDb: () => Promise<Dexie>
@@ -232,6 +236,17 @@ export class AnnotationStorage extends FeatureStorage {
             .findObjects<Annotation>({ pageUrl })
     }
 
+    // TODO: Find better way of calculating this?
+    private isAnnotDirectLink = (annot: Annotation) => {
+        let isDirectLink = false
+
+        for (const provider of AnnotationStorage.MEMEX_LINK_PROVIDERS) {
+            isDirectLink = isDirectLink || annot.url.startsWith(provider)
+        }
+
+        return isDirectLink
+    }
+
     /**
      * I don't know why this is the only way I can get this working...
      * I originally intended a simpler single query like:
@@ -244,10 +259,11 @@ export class AnnotationStorage extends FeatureStorage {
             limit = 5,
             url,
             highlightsOnly = false,
+            directLinksOnly = false,
         }: Partial<SearchParams>,
         { domainUrls, tagUrls }: UrlFilters,
     ) => async (term: string) => {
-        const termSearchField = (field: string) => {
+        const termSearchField = async (field: string) => {
             const query: any = {
                 [field]: { $all: [term] },
                 createdWhen: {
@@ -266,9 +282,13 @@ export class AnnotationStorage extends FeatureStorage {
                 query.url = { $in: [...tagUrls] }
             }
 
-            return this.storageManager
+            const results = await this.storageManager
                 .collection(this._annotationsColl)
                 .findObjects<Annotation>(query, { limit })
+
+            return directLinksOnly
+                ? results.filter(this.isAnnotDirectLink)
+                : results
         }
 
         if (
@@ -282,6 +302,7 @@ export class AnnotationStorage extends FeatureStorage {
         const commentsRes = highlightsOnly
             ? []
             : await termSearchField('_comment_terms')
+
         return this._uniqAnnots([...bodyRes, ...commentsRes]).slice(0, limit)
     }
 

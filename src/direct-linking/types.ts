@@ -39,6 +39,8 @@ export interface SearchParams {
     limit?: number
     /** Denotes whether or not to limit search to highlighted text. */
     highlightsOnly?: boolean
+    /** Denotes whether or not to limit search to direct links. */
+    directLinksOnly?: boolean
 }
 
 export interface UrlFilters {
