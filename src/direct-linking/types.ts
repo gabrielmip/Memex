@@ -31,9 +31,15 @@ export type AnnotationSender = (
 export interface SearchParams {
     terms: string[]
     tags: string[]
+    domains: string[]
     startDate: Date | number
     endDate: Date | number
     /** If defined, confines search to a particular page. */
     url?: string
     limit: number
+}
+
+export interface UrlFilters {
+    tagUrls?: Set<string>
+    domainUrls?: Set<string>
 }

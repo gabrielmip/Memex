@@ -1,10 +1,16 @@
 import { browser, Tabs, Storage } from 'webextension-polyfill-ts'
 import uniqBy from 'lodash/fp/uniqBy'
 
-import { createPageFromTab, Tag, Dexie, StorageManager } from '../../search'
+import {
+    createPageFromTab,
+    Tag,
+    Page,
+    Dexie,
+    StorageManager,
+} from '../../search'
 import { FeatureStorage } from '../../search/storage'
 import { STORAGE_KEYS as IDXING_PREF_KEYS } from '../../options/settings/constants'
-import { Annotation, SearchParams } from '../types'
+import { Annotation, SearchParams, UrlFilters } from '../types'
 
 export interface DirectLinkingStorageProps {
     storageManager: StorageManager
@@ -126,9 +132,10 @@ export default class DirectLinkingStorage extends FeatureStorage {
 
 export interface AnnotationStorageProps {
     storageManager: StorageManager
-        getDb: () => Promise<Dexie>
+    getDb: () => Promise<Dexie>
     browserStorageArea?: Storage.StorageArea
     annotationsColl?: string
+    pagesColl?: string
     tagsColl?: string
 }
 
@@ -136,9 +143,12 @@ export interface AnnotationStorageProps {
 export class AnnotationStorage extends FeatureStorage {
     static ANNOTS_COLL = 'annotations'
     static TAGS_COLL = 'tags'
+    static PAGES_COLL = 'pages'
+
     private _browserStorageArea: Storage.StorageArea
     private _getDb: () => Promise<Dexie>
     private _annotationsColl: string
+    private _pagesColl: string
     private _tagsColl: string
     private _uniqAnnots: (annots: Annotation[]) => Annotation[] = uniqBy('url')
 
@@ -147,11 +157,13 @@ export class AnnotationStorage extends FeatureStorage {
         getDb,
         browserStorageArea = browser.storage.local,
         annotationsColl = AnnotationStorage.ANNOTS_COLL,
+        pagesColl = AnnotationStorage.PAGES_COLL,
         tagsColl = AnnotationStorage.TAGS_COLL,
     }: AnnotationStorageProps) {
         super(storageManager)
         this._annotationsColl = annotationsColl
         this._tagsColl = tagsColl
+        this._pagesColl = pagesColl
 
         this._browserStorageArea = browserStorageArea
         this._getDb = getDb
@@ -232,7 +244,7 @@ export class AnnotationStorage extends FeatureStorage {
             limit = 5,
             url,
         }: Partial<SearchParams>,
-        urlPool: Set<string>,
+        { domainUrls, tagUrls }: UrlFilters,
     ) => async (term: string) => {
         const termSearchField = (field: string) => {
             const query: any = {
@@ -245,13 +257,24 @@ export class AnnotationStorage extends FeatureStorage {
 
             if (url != null && url.length) {
                 query.pageUrl = url
-            } else if (urlPool.size) {
-                query.url = { $in: [...urlPool] }
+            } else if (domainUrls != null && domainUrls.size) {
+                query.pageUrl = { $in: [...domainUrls] }
+            }
+
+            if (tagUrls != null && tagUrls.size) {
+                query.url = { $in: [...tagUrls] }
             }
 
             return this.storageManager
                 .collection(this._annotationsColl)
                 .findObjects<Annotation>(query, { limit })
+        }
+
+        if (
+            (domainUrls != null && domainUrls.size === 0) ||
+            (tagUrls != null && tagUrls.size === 0)
+        ) {
+            return []
         }
 
         const bodyRes = await termSearchField('_body_terms')
@@ -261,29 +284,47 @@ export class AnnotationStorage extends FeatureStorage {
 
     private async tagSearch({ tags }: Partial<SearchParams>) {
         if (!tags.length) {
-            return new Set<string>()
+            return undefined
         }
 
         const tagResults = await this.storageManager
-            .collection(AnnotationStorage.TAGS_COLL)
+            .collection(this._tagsColl)
             .findObjects<Tag>({ name: { $in: tags } })
 
         return new Set<string>(tagResults.map(tag => tag.url))
     }
 
-    private domainSearch(args: Partial<SearchParams>) {
-        return new Set<string>()
+    private async domainSearch({ domains }: Partial<SearchParams>) {
+        if (!domains.length) {
+            return undefined
+        }
+
+        const pages = await this.storageManager
+            .collection(this._pagesColl)
+            .findObjects<Page>({
+                $or: [
+                    { hostname: { $in: domains } },
+                    { domain: { $in: domains } },
+                ],
+            })
+
+        return new Set(pages.map(page => page.url))
     }
 
-    async search({ terms = [], tags = [], ...searchParams }: SearchParams) {
-        const filters = {
+    async search({
+        terms = [],
+        tags = [],
+        domains = [],
+        ...searchParams
+    }: SearchParams) {
+        const filters: UrlFilters = {
             tagUrls: await this.tagSearch({ tags }),
-            domainUrls: await this.domainSearch({}),
+            domainUrls: await this.domainSearch({ domains }),
         }
-        const urlPool = new Set([...filters.tagUrls, ...filters.domainUrls])
 
+        console.log(filters)
         const termResults = await Promise.all(
-            terms.map(this.termSearch(searchParams, urlPool)),
+            terms.map(this.termSearch(searchParams, filters)),
         )
 
         // Flatten out results
