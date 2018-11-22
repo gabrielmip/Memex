@@ -29,14 +29,16 @@ export type AnnotationSender = (
 ) => void
 
 export interface SearchParams {
-    terms: string[]
-    tags: string[]
-    domains: string[]
-    startDate: Date | number
-    endDate: Date | number
+    terms?: string[]
+    tags?: string[]
+    domains?: string[]
+    startDate?: Date | number
+    endDate?: Date | number
     /** If defined, confines search to a particular page. */
     url?: string
-    limit: number
+    limit?: number
+    /** Denotes whether or not to limit search to highlighted text. */
+    highlightsOnly?: boolean
 }
 
 export interface UrlFilters {

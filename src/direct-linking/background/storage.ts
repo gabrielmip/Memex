@@ -243,6 +243,7 @@ export class AnnotationStorage extends FeatureStorage {
             startDate = 0,
             limit = 5,
             url,
+            highlightsOnly = false,
         }: Partial<SearchParams>,
         { domainUrls, tagUrls }: UrlFilters,
     ) => async (term: string) => {
@@ -278,7 +279,9 @@ export class AnnotationStorage extends FeatureStorage {
         }
 
         const bodyRes = await termSearchField('_body_terms')
-        const commentsRes = await termSearchField('_comment_terms')
+        const commentsRes = highlightsOnly
+            ? []
+            : await termSearchField('_comment_terms')
         return this._uniqAnnots([...bodyRes, ...commentsRes]).slice(0, limit)
     }
 
@@ -308,7 +311,7 @@ export class AnnotationStorage extends FeatureStorage {
                 ],
             })
 
-        return new Set(pages.map(page => page.url))
+        return new Set<string>(pages.map(page => page.url))
     }
 
     async search({
@@ -322,7 +325,6 @@ export class AnnotationStorage extends FeatureStorage {
             domainUrls: await this.domainSearch({ domains }),
         }
 
-        console.log(filters)
         const termResults = await Promise.all(
             terms.map(this.termSearch(searchParams, filters)),
         )
