@@ -225,12 +225,15 @@ export class AnnotationStorage extends FeatureStorage {
      * I originally intended a simpler single query like:
      *  { $or: [_body_terms: term, _comment_terms: term] }
      */
-    private termSearch = ({
-        endDate = Date.now(),
-        startDate = 0,
-        limit = 5,
-        url,
-    }: Partial<SearchParams>) => async (term: string) => {
+    private termSearch = (
+        {
+            endDate = Date.now(),
+            startDate = 0,
+            limit = 5,
+            url,
+        }: Partial<SearchParams>,
+        urlPool: Set<string>,
+    ) => async (term: string) => {
         const termSearchField = (field: string) => {
             const query: any = {
                 [field]: { $all: [term] },
@@ -242,6 +245,8 @@ export class AnnotationStorage extends FeatureStorage {
 
             if (url != null && url.length) {
                 query.pageUrl = url
+            } else if (urlPool.size) {
+                query.url = { $in: [...urlPool] }
             }
 
             return this.storageManager
@@ -254,9 +259,31 @@ export class AnnotationStorage extends FeatureStorage {
         return this._uniqAnnots([...bodyRes, ...commentsRes]).slice(0, limit)
     }
 
-    async search({ terms = [], ...searchParams }: SearchParams) {
+    private async tagSearch({ tags }: Partial<SearchParams>) {
+        if (!tags.length) {
+            return new Set<string>()
+        }
+
+        const tagResults = await this.storageManager
+            .collection(AnnotationStorage.TAGS_COLL)
+            .findObjects<Tag>({ name: { $in: tags } })
+
+        return new Set<string>(tagResults.map(tag => tag.url))
+    }
+
+    private domainSearch(args: Partial<SearchParams>) {
+        return new Set<string>()
+    }
+
+    async search({ terms = [], tags = [], ...searchParams }: SearchParams) {
+        const filters = {
+            tagUrls: await this.tagSearch({ tags }),
+            domainUrls: await this.domainSearch({}),
+        }
+        const urlPool = new Set([...filters.tagUrls, ...filters.domainUrls])
+
         const termResults = await Promise.all(
-            terms.map(this.termSearch(searchParams)),
+            terms.map(this.termSearch(searchParams, urlPool)),
         )
 
         // Flatten out results

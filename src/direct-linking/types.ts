@@ -30,6 +30,7 @@ export type AnnotationSender = (
 
 export interface SearchParams {
     terms: string[]
+    tags: string[]
     startDate: Date | number
     endDate: Date | number
     /** If defined, confines search to a particular page. */
