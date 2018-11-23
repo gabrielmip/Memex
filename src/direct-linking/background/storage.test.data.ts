@@ -34,6 +34,6 @@ export const comment = {
     pageUrl,
     body: '',
     url: 'https://annotation.url/#12124124159',
-    comment: 'Hmm this is just a commenttuuu',
+    comment: 'Hmm this is just a comment',
     selector: {},
 }

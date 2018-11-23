@@ -72,6 +72,45 @@ describe('Annotations storage', () => {
             expect(tags.length).toBe(2)
             assertTag(tags[0], DATA.tag1)
         })
+
+        test('terms search', async () => {
+            const results = await annotationStorage.search({
+                terms: ['highlight', 'annotation', 'comment'],
+            })
+
+            expect(results).toBeDefined()
+            expect(results.length).toBe(3)
+        })
+
+        test('terms search (highlight only)', async () => {
+            const results = await annotationStorage.search({
+                terms: ['highlight', 'annotation', 'comment'],
+                highlightsOnly: true,
+            })
+
+            expect(results).toBeDefined()
+            expect(results.length).toBe(2)
+        })
+
+        test('terms search (tag filter)', async () => {
+            const results = await annotationStorage.search({
+                terms: ['highlight', 'annotation', 'comment'],
+                tagsInc: [DATA.tag1],
+            })
+
+            expect(results).toBeDefined()
+            expect(results.length).toBe(1)
+        })
+
+        test('terms search (domain filter)', async () => {
+            const results = await annotationStorage.search({
+                terms: ['highlight', 'annotation', 'comment'],
+                domainsExc: ['annotation.url'],
+            })
+
+            expect(results).toBeDefined()
+            expect(results.length).toBe(0)
+        })
     })
 
     describe('Update operations: ', () => {
