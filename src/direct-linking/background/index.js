@@ -1,4 +1,5 @@
 import { makeRemotelyCallable, remoteFunction } from 'src/util/webextensionRPC'
+import QueryBuilder from 'src/search/query-builder'
 import DirectLinkingBackend from './backend'
 import { setupRequestInterceptor } from './redirect'
 import { AnnotationRequests } from './request'
@@ -6,8 +7,9 @@ import DirectLinkingStorage, { AnnotationStorage } from './storage'
 import normalize from '../../util/encode-url-for-id'
 
 export default class DirectLinkingBackground {
-    constructor({ storageManager, getDb }) {
+    constructor({ storageManager, getDb, queryBuilder = new QueryBuilder() }) {
         this.backend = new DirectLinkingBackend()
+        this.queryBuilder = queryBuilder
         this.directLinkingStorage = new DirectLinkingStorage({
             storageManager,
             getDb,
@@ -130,8 +132,17 @@ export default class DirectLinkingBackground {
         return uniqueUrl
     }
 
-    async searchAnnotations({ tab }, params) {
-        return this.annotationStorage.search(params)
+    async searchAnnotations(_, { query, ...params }) {
+        const qb = this.queryBuilder.searchTerm(query).get()
+
+        if (qb.isBadTerm || qb.isInvalidSearch) {
+            return []
+        }
+
+        return this.annotationStorage.search({
+            terms: [...qb.query],
+            ...params,
+        })
     }
 
     async editAnnotation({ tab }, pk, comment) {
